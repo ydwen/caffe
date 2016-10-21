@@ -1,3 +1,23 @@
+#Faster Center Loss Implementation
+This branch is forked from [ydwen's caffe-face](https://github.com/ydwen/caffe-face) and modified by mfs6174 ( mfs6174@gmail.com )
+
+Compared to the original implementation by the paper author, the backward time complexity of this implementation is optimized to O(MK) from O(MK+NM).
+
+In the original implementation, the time complexity of the backward process of the center loss layer is O(MK+NM). It will be very slow when training with a large number of classes since the running time of the backward pass is related to the class number (N). Unfortunately, it is a common case when training face recognition model (e.g. 750k unique persons).
+
+This implementation rewrites the backward code. The time complexity is optimized to O(MK) with additional O(N) space. Because M (batch size) << N and K (feature length) << N usually hold for face recognition problem, this modification will improve the training speed significantly.
+
+For a Googlenet v2 model trained with Everphoto's 750k unique person dataset, on a single Nvidia GTX Titan X, with 24 batch size and iter_size = 5, the average backward iteration time for different cases is:
+1. Softmax only: 230ms
+2. Softmax + Center loss, original implementation: 3485ms, center loss layer: 3332ms
+3. Softmax + Center loss, implementation in this PR: 235.6ms, center loss layer: 5.4ms
+
+There is more than 600x improvement.
+
+For the author's "minit_example", running on a single GTX Titan X, training time of the original implementation and the PR is 4min20s V.S. 3min50s. It is shown that even when training with small dataset with only 10 classes, there still is some improvement.
+
+The implementation also fix the code style to pass the Caffe's lint test (make lint) so that it may be ready to be  merged into Caffe's master.
+
 # Deep Face Recognition with Caffe Implementation
 
 This branch is developed for deep face recognition, the related paper is as follows.

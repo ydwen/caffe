@@ -8,6 +8,7 @@ In the original implementation, the time complexity of the backward process of t
 This implementation rewrites the backward code. The time complexity is optimized to O(MK) with additional O(N) space. Because M (batch size) << N and K (feature length) << N usually hold for face recognition problem, this modification will improve the training speed significantly.
 
 For a Googlenet v2 model trained with Everphoto's 750k unique person dataset, on a single Nvidia GTX Titan X, with 24 batch size and iter_size = 5, the average backward iteration time for different cases is:
+
 1. Softmax only: 230ms
 2. Softmax + Center loss, original implementation: 3485ms, center loss layer: 3332ms
 3. Softmax + Center loss, implementation in this PR: 235.6ms, center loss layer: 5.4ms

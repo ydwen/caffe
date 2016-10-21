@@ -9,7 +9,7 @@ namespace caffe {
 template <typename Dtype>
 void CenterLossLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
-  const int num_output = this->layer_param_.center_loss_param().num_output();  
+  const int num_output = this->layer_param_.center_loss_param().num_output();
   N_ = num_output;
   const int axis = bottom[0]->CanonicalAxisIndex(
       this->layer_param_.center_loss_param().axis());
@@ -31,7 +31,6 @@ void CenterLossLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     shared_ptr<Filler<Dtype> > center_filler(GetFiller<Dtype>(
         this->layer_param_.center_loss_param().center_filler()));
     center_filler->Fill(this->blobs_[0].get());
-
   }  // parameter initialization
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 }
@@ -48,6 +47,9 @@ void CenterLossLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   LossLayer<Dtype>::Reshape(bottom, top);
   distance_.ReshapeLike(*bottom[0]);
   variation_sum_.ReshapeLike(*this->blobs_[0]);
+  vector<int> count_shape(1);
+  count_shape[0] = N_;
+  count_.Reshape(count_shape);
 }
 
 template <typename Dtype>
@@ -57,53 +59,63 @@ void CenterLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   const Dtype* label = bottom[1]->cpu_data();
   const Dtype* center = this->blobs_[0]->cpu_data();
   Dtype* distance_data = distance_.mutable_cpu_data();
-  
   // the i-th distance_data
   for (int i = 0; i < M_; i++) {
     const int label_value = static_cast<int>(label[i]);
     // D(i,:) = X(i,:) - C(y(i),:)
-    caffe_sub(K_, bottom_data + i * K_, center + label_value * K_, distance_data + i * K_);
+    caffe_sub(K_, bottom_data + i * K_,
+              center + label_value * K_, distance_data + i * K_);
   }
-  Dtype dot = caffe_cpu_dot(M_ * K_, distance_.cpu_data(), distance_.cpu_data());
+  Dtype dot = caffe_cpu_dot(M_ * K_, distance_.cpu_data(),
+                            distance_.cpu_data());
   Dtype loss = dot / M_ / Dtype(2);
   top[0]->mutable_cpu_data()[0] = loss;
 }
 
 template <typename Dtype>
 void CenterLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
-    const vector<bool>& propagate_down,
-    const vector<Blob<Dtype>*>& bottom) {
+                                          const vector<bool>& propagate_down,
+                                          const vector<Blob<Dtype>*>& bottom) {
   // Gradient with respect to centers
   if (this->param_propagate_down_[0]) {
     const Dtype* label = bottom[1]->cpu_data();
     Dtype* center_diff = this->blobs_[0]->mutable_cpu_diff();
     Dtype* variation_sum_data = variation_sum_.mutable_cpu_data();
+    int* count_data = count_.mutable_cpu_data();
+
     const Dtype* distance_data = distance_.cpu_data();
 
     // \sum_{y_i==j}
     caffe_set(N_ * K_, (Dtype)0., variation_sum_.mutable_cpu_data());
-    for (int n = 0; n < N_; n++) {
-      int count = 0;
-      for (int m = 0; m < M_; m++) {
-        const int label_value = static_cast<int>(label[m]);
-        if (label_value == n) {
-          count++;
-          caffe_sub(K_, variation_sum_data + n * K_, distance_data + m * K_, variation_sum_data + n * K_);
-        }
-      }
-      caffe_axpy(K_, (Dtype)1./(count + (Dtype)1.), variation_sum_data + n * K_, center_diff + n * K_);
+    caffe_set(N_, 0 , count_.mutable_cpu_data());
+    caffe_set(N_ * K_, (Dtype)0., this->blobs_[0]->mutable_cpu_diff());
+
+    for (int m = 0; m < M_; m++) {
+      const int label_value = static_cast<int>(label[m]);
+      caffe_sub(K_, variation_sum_data + label_value * K_,
+                distance_data + m * K_, variation_sum_data + label_value * K_);
+      count_data[label_value]++;
+    }
+    for (int m = 0; m < M_; m++) {
+      const int n = static_cast<int>(label[m]);
+      caffe_cpu_axpby(K_, (Dtype)1./ (count_data[n] + (Dtype)1.),
+                      variation_sum_data + n * K_,
+                      (Dtype)0., center_diff + n * K_);
     }
   }
-  // Gradient with respect to bottom data 
+  // Gradient with respect to bottom data
   if (propagate_down[0]) {
-    caffe_copy(M_ * K_, distance_.cpu_data(), bottom[0]->mutable_cpu_diff());
-    caffe_scal(M_ * K_, top[0]->cpu_diff()[0] / M_, bottom[0]->mutable_cpu_diff());
+    caffe_copy(M_ * K_, distance_.cpu_data(),
+               bottom[0]->mutable_cpu_diff());
+    caffe_scal(M_ * K_, top[0]->cpu_diff()[0] / M_,
+               bottom[0]->mutable_cpu_diff());
   }
   if (propagate_down[1]) {
     LOG(FATAL) << this->type()
                << " Layer cannot backpropagate to label inputs.";
   }
 }
+
 
 #ifdef CPU_ONLY
 STUB_GPU(CenterLossLayer);

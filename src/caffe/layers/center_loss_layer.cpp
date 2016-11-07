@@ -88,7 +88,6 @@ void CenterLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     // \sum_{y_i==j}
     caffe_set(N_ * K_, (Dtype)0., variation_sum_.mutable_cpu_data());
     caffe_set(N_, 0 , count_.mutable_cpu_data());
-    caffe_set(N_ * K_, (Dtype)0., this->blobs_[0]->mutable_cpu_diff());
 
     for (int m = 0; m < M_; m++) {
       const int label_value = static_cast<int>(label[m]);

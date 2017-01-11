@@ -38,9 +38,9 @@ class CenterLossLayer : public LossLayer<Dtype> {
   int M_;
   int K_;
   int N_;
-  
   Blob<Dtype> distance_;
   Blob<Dtype> variation_sum_;
+  Blob<int> count_;
 };
 
 }  // namespace caffe
